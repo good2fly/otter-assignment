@@ -21,7 +21,7 @@ class OrderProcessorTest {
         assertEquals(target, action.getTarget());
     }
 
-    private OrderActionDispatcher dispatcher;
+    private OrderActionDispatcherImpl dispatcher;
 
     @BeforeEach
     void setUp() {

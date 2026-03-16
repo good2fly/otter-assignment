@@ -178,18 +178,15 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
     }
 
     private StorageType makeRoomForRoomTemp() {
-        if (!isShelfFull()) {
-            return StorageType.SHELF;
+        StorageType result = StorageType.SHELF;
+        if (isShelfFull()) {
+            if (!isCoolerFull() && !shelfCold.isEmpty()) {
+                moveOneOrderToIdealStorage(shelfCold, cooler, StorageType.COOLER);
+            } else if (!tryMovingOneHotOrderToHeater()) {
+                discardOneShelfItem();
+            }
         }
-        if (!isCoolerFull() && !shelfCold.isEmpty()) {
-            moveOneOrderToIdealStorage(shelfCold, cooler, StorageType.COOLER);
-            return StorageType.SHELF;
-        }
-        if (tryMovingOneHotOrderToHeater()) {
-            return StorageType.SHELF;
-        }
-        discardOneShelfItem();
-        return StorageType.SHELF;
+        return result;
     }
 
     private boolean tryMovingOneHotOrderToHeater() {
@@ -212,10 +209,10 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
         AcceptedOrder oldestHot  = shelfHot.isEmpty() ? null : shelfHot.first();
         AcceptedOrder oldestCold = shelfCold.isEmpty() ? null : shelfCold.first();
         AcceptedOrder oldestRoom = shelfRoom.isEmpty() ? null : shelfRoom.first();
+        //noinspection OptionalGetWithoutIsPresent
         AcceptedOrder oldestOrder = Stream.of(oldestHot, oldestCold, oldestRoom)
                 .filter(Objects::nonNull)
-                .sorted(ORDER_DISCARD_COMPARATOR)
-                .findFirst()
+                .min(ORDER_DISCARD_COMPARATOR)
                 .get(); // we know at least one of these is not null, as shelf is known to be full, so get() is safe
         removeOrder(oldestOrder.getId());
         dispatcher.dispatch(new Action(Instant.now(), oldestOrder.getId(), Action.DISCARD, Action.SHELF));

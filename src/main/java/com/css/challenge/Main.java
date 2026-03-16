@@ -5,7 +5,6 @@ import com.css.challenge.client.Order;
 import com.css.challenge.client.OrderPickupScheduler;
 import com.css.challenge.client.Problem;
 import com.css.challenge.client.RandomOrderPickupDelayProvider;
-import com.css.challenge.server.OrderActionDispatcher;
 import com.css.challenge.server.OrderActionDispatcherImpl;
 import com.css.challenge.server.OrderProcessor;
 import org.slf4j.Logger;
@@ -51,7 +50,7 @@ public class Main implements Runnable {
 
     validateOptions();
 
-    OrderActionDispatcher dispatcher = new OrderActionDispatcherImpl();
+    OrderActionDispatcherImpl dispatcher = new OrderActionDispatcherImpl();
     OrderProcessor processor = new OrderProcessor(dispatcher, 6, 6, 12);
     OrderPickupScheduler pickupScheduler = new OrderPickupScheduler(processor, new RandomOrderPickupDelayProvider(min, max));
 
