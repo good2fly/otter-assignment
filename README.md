@@ -4,7 +4,7 @@ Author: `Attila Uhljar`
 
 ## How to run
 
-The `Dockerfile` defines a self-contained Java/Gradle reference environment.
+The `Dockerfile` defines a self-contained Java 25 reference environment.
 Build and run the program using [Docker](https://docs.docker.com/get-started/get-docker/):
 ```
 $ docker build -t challenge .
