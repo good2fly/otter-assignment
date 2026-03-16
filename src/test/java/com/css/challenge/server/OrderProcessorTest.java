@@ -55,6 +55,20 @@ class OrderProcessorTest {
     }
 
     @Test
+    void order_placed_multiple_times_is_ignored() {
+        OrderProcessor processor = new OrderProcessor(dispatcher, 1, 1, 1);
+
+        processor.place(createOrder("cold-1", "cold", 12, 30));
+        processor.place(createOrder("cold-1", "cold", 12, 30));
+        processor.pickup("cold-1");
+
+        List<Action> actions = dispatcher.getActions();
+        assertEquals(2, actions.size());
+        assertAction(actions.get(0), "cold-1", Action.PLACE, Action.COOLER);
+        assertAction(actions.get(1), "cold-1", Action.PICKUP, Action.COOLER);
+    }
+
+    @Test
     void order_cannot_be_picked_up_multiple_times() {
         OrderProcessor processor = new OrderProcessor(dispatcher, 1, 1, 1);
 

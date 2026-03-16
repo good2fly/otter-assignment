@@ -74,6 +74,11 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
         validateOrder(order);
         try {
             lock.lock();
+            if (orderLookup.containsKey(order.getId())) {
+                // Alternatively throw an exception, depending on business requirements (not specified in the assignment).
+                LOGGER.error("Order {} has already been placed", order);
+                return;
+            }
             placeOrder(order);
         } catch (Exception e) {
             LOGGER.error("Error processing order {}", order, e);
