@@ -6,6 +6,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
+/**
+ * Internal working representation of an order.
+ * In addition to the properties in the {@link Order} DTO, this class also carries additional ones needed for
+ * processing the orders and maintaining a running expiration time.
+ */
 public class AcceptedOrder {
 
     /** Order ID */
@@ -20,12 +25,16 @@ public class AcceptedOrder {
     private final int freshness;
     /** Time order was accepted/cooked. */
     private final Instant startTime;
-    /** Projected expiration time. Initially,it just the start time + freshness (or freshness / 2 if not stored ideally).
+    /**
+     * Projected expiration time. Initially,it just the start time + freshness (or freshness / 2 if not stored ideally).
      * Later in, if we move the order from the shelf to its ideal storage, we will update it using the following formula:
+     * <br/>
      * <code>s + m + (f - 2m) = s + f - m</code>
-     * where <ul>
+     * <br/>
+     * where
+     * <ul>
      *     <li>s : start time</li>
-     *     <li>m : move time (in seconds) from shelf to ideal storage, relative to start time</li>
+     *     <li>m : time (in seconds) of moving an order from the shelf to its ideal storage, relative to start time</li>
      *     <li>f : original freshsness time (in seconds)</li>
      * </ul>
      */

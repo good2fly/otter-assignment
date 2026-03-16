@@ -1,5 +1,8 @@
 package com.css.challenge.server;
 
+/**
+ * Represent the possible temperature values for any given order.
+ */
 public enum TempType {
 
     HOT,

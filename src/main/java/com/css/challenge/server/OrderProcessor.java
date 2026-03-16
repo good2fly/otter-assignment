@@ -51,19 +51,27 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
     private final Map<String, AcceptedOrder> orderLookup = new HashMap<>();
     private final SortedSet<AcceptedOrder> cooler = new TreeSet<>(ORDER_DISCARD_COMPARATOR);
     private final SortedSet<AcceptedOrder> heater = new TreeSet<>(ORDER_DISCARD_COMPARATOR);
+    /** Section of the shelf that holds hot orders. */
     private final SortedSet<AcceptedOrder> shelfHot    = new TreeSet<>(ORDER_DISCARD_COMPARATOR);
+    /** Section of the shelf that holds cold orders. */
     private final SortedSet<AcceptedOrder> shelfCold   = new TreeSet<>(ORDER_DISCARD_COMPARATOR);
+    /** Section of the shelf that holds room temperature orders. */
     private final SortedSet<AcceptedOrder> shelfRoom   = new TreeSet<>(ORDER_DISCARD_COMPARATOR);
 
     public OrderProcessor(OrderActionDispatcher dispatcher, int hotCapacity, int coldCapacity, int shelfCapacity) {
+        if (hotCapacity <= 0 || coldCapacity <= 0 || shelfCapacity <= 0) {
+            throw new IllegalArgumentException("Storage capacity must be greater than zero for all storage types");
+        }
         this.dispatcher = dispatcher;
         this.coldCapacity = coldCapacity;
         this.hotCapacity = hotCapacity;
         this.shelfCapacity = shelfCapacity;
     }
 
+    @Override
     public void place(Order order) {
         LOGGER.info("Processing order {}", order);
+        validateOrder(order);
         try {
             lock.lock();
             placeOrder(order);
@@ -75,6 +83,27 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
         }
     }
 
+    private void validateOrder(Order order) {
+        if (order == null) {
+            throw new IllegalArgumentException("Order cannot be null");
+        }
+        if (order.getId() == null || order.getId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Order id cannot be empty");
+        }
+        if (order.getName() == null || order.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Order name cannot be empty");
+        }
+        if (order.getTemp() == null || order.getTemp().trim().isEmpty()) {
+            throw new IllegalArgumentException("Order temp cannot be empty");
+        }
+        if (order.getPrice() < 0) {
+            throw new IllegalArgumentException("Order price cannot be negative");
+        }
+        if (order.getFreshness() <= 0) {
+            throw new IllegalArgumentException("Order freshness must be greater than zero");
+        }
+    }
+
     @Override
     public void pickup(String orderId) {
         LOGGER.info("Pick up order ID={}", orderId);
@@ -82,7 +111,10 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
             lock.lock();
             removeOrder(orderId).ifPresentOrElse(
                     // assuming 'target' in pickup action means the storage the order was picked up from
-                    removedOrder -> dispatcher.dispatch(new Action(Instant.now(), orderId, removedOrder.order.isExpired() ? Action.DISCARD : Action.PICKUP, removedOrder.storageType.name().toLowerCase())),
+                    removedOrder -> dispatcher.dispatch(new Action(Instant.now(),
+                                                        orderId,
+                                                        removedOrder.order.isExpired() ? Action.DISCARD : Action.PICKUP,
+                                                        removedOrder.storageType.toActionString())),
                     () -> LOGGER.warn("No order found with ID={} for pickup", orderId)
             );
         } catch (Exception e) {
@@ -93,24 +125,14 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
         }
     }
 
-    /**
-     * To ensure the food remains as fresh as possible, the system should try to store a cooked order
-     * at its ideal temperature. If the ideal option is full, the order must be placed on the shelf. If the
-     * shelf is also full, the system should first move an existing, cold or hot order on the shelf to either
-     * the cooler or heater, respectively, if there is room. If no such move is possible, an order stored
-     * on the shelf must be selected – thoughtfully using a criteria of your choice – and discarded first
-     * to make room for the new order.
-     *
-     * @param order The order placed
-     */
     private void placeOrder(Order order) {
         Instant now = Instant.now();
-        AcceptedOrder acceptedOrder = new AcceptedOrder(order, now); // now: order cooked instantly (wish that was true!)
+        AcceptedOrder acceptedOrder = new AcceptedOrder(order, now); // now is both accepted and cooked time as orders are cooked instantly
         StorageType idealStorageType = acceptedOrder.getTemp().getIdealStorageType();
         StorageType actualStorageType = findStorageForType(idealStorageType);
         acceptedOrder.setExpirationTimeForInitialStorage(actualStorageType);
         storeOrder(acceptedOrder, actualStorageType);
-        dispatcher.dispatch(new Action(now, order.getId(), Action.PLACE, actualStorageType.name().toLowerCase()));
+        dispatcher.dispatch(new Action(now, order.getId(), Action.PLACE, actualStorageType.toActionString()));
     }
 
     private StorageType findStorageForType(StorageType idealStorageType) {
@@ -196,18 +218,18 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
                 .findFirst()
                 .get(); // we know at least one of these is not null, as shelf is known to be full, so get() is safe
         removeOrder(oldestOrder.getId());
-        dispatcher.dispatch(new Action(Instant.now(), oldestOrder.getId(), Action.DISCARD, Action.SHELF)); // what does 'target' mean here?
+        dispatcher.dispatch(new Action(Instant.now(), oldestOrder.getId(), Action.DISCARD, Action.SHELF));
     }
 
     private void moveOneOrderToIdealStorage(SortedSet<AcceptedOrder> from, SortedSet<AcceptedOrder> to, StorageType toStorageType) {
-        // Removing the freshest one from the shelf to try to save it. We could waste an order by moving an old one.
+        // Removing the freshest one from the shelf to try to save it. Moving an old (possibly expired) order can result in waste.
         AcceptedOrder order = from.removeLast();
         LOGGER.info("Moving order {} to {}", order,  toStorageType);
         Instant expBefore = order.getExpirationTime();
         order.updateExpirationTimeForMoveToIdealStorage();
         LOGGER.info("Expiration time changed for order ID={} from {} to {}", order.getId(), expBefore, order.getExpirationTime());
         to.add(order);
-        dispatcher.dispatch(new Action(Instant.now(), order.getId(), Action.MOVE, toStorageType.name().toLowerCase()));
+        dispatcher.dispatch(new Action(Instant.now(), order.getId(), Action.MOVE, toStorageType.toActionString()));
     }
 
     private Optional<RemovedOrder> removeOrder(String orderId) {
@@ -222,7 +244,7 @@ public class OrderProcessor implements OrderPlacer, OrderPickupProvider {
             case HEATER -> {
                 if (heater.remove(order)) yield StorageType.HEATER;
                 if (shelfHot.remove(order)) yield StorageType.SHELF;
-                // Protect invariants just in case there's a bug somewhere else
+                // Protect invariants
                 throw new IllegalStateException("Hot order ID=" + orderId + " not found in either heater, or (hot) shelf.");
             }
             case COOLER -> {

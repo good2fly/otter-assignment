@@ -18,22 +18,22 @@ $ ./gradlew run --args="--auth=<token>"
 
 ## Discard criteria
 
-Since we know that expired orders (orders who exceed their 'freshness' limit) are discarded no matter what, the primary
-condition for selecting an order to be discarded is it's expiration time. We are not losing any income by discarding 
+Since we know that expired orders (orders that exceed their 'freshness' limit) are discarded no matter what, the primary
+condition for selecting an order to be discarded is their expiration time. We are not losing any income by discarding 
 already expired orders, and minimize potential loss by discarding the orders that are soonest to expire if there are no
-already expirer orders available. I chose to then break the tie by discarding the less expensive order (this is  only
+already expired orders available. I chose to then break the tie by discarding the less expensive order (this is only
 really relevant if the oldest orders haven't expired yet).
 
 ## Design notes
-- Since the processing time is very small, and does not involve long, blocking operations,
-  the actual processing single-threaded, but thread-safe, as the harness itself can be run concurrently
+- The order processing time is very small and does not involve long, blocking operations, so 
+  the actual processing is single-threaded, but thread-safe, as the harness itself can be run concurrently
 - Since the business logic (especially the placement) involves many steps and has to maintain invariants across
   several internal state variables, I opted for global locks, rather than try to complicate things by
-  trying to make locking fine-grained, but much more complicated.
+  trying to make locking fine-grained (and likely much more complicated)
 - I opted for basing the ordering/discard logic on expiration time, rather than 'freshness', as 
   1. It is a lot easier to reason about
   2. Directly comparable to each other
-- Expiration time can be calculated at most twice:
+- Expiration time can be calculated at most twice per order:
   1. When the order is placed. This is based purely on 'freshness', and whether the order is placed in its ideal storage
   2. When the order is moved from shelf to its ideal storage. We have to account for the time it spent in the non-ideal 
      storage (see more details in the Javadoc).
