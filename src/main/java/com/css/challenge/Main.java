@@ -1,19 +1,21 @@
 package com.css.challenge;
 
-import com.css.challenge.client.Action;
 import com.css.challenge.client.Client;
 import com.css.challenge.client.Order;
+import com.css.challenge.client.OrderPickupScheduler;
 import com.css.challenge.client.Problem;
-import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import com.css.challenge.client.RandomOrderPickupDelayProvider;
+import com.css.challenge.server.OrderActionDispatcher;
+import com.css.challenge.server.OrderActionDispatcherImpl;
+import com.css.challenge.server.OrderProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+
+import java.io.IOException;
+import java.time.Duration;
 
 @Command(name = "challenge", showDefaultValues = true)
 public class Main implements Runnable {
@@ -46,27 +48,42 @@ public class Main implements Runnable {
 
   @Override
   public void run() {
+
+    validateOptions();
+
+    OrderActionDispatcher dispatcher = new OrderActionDispatcherImpl();
+    OrderProcessor processor = new OrderProcessor(dispatcher, 6, 6, 12);
+    OrderPickupScheduler pickupScheduler = new OrderPickupScheduler(processor, new RandomOrderPickupDelayProvider(min, max));
+
     try {
       Client client = new Client(endpoint, auth);
       Problem problem = client.newProblem(name, seed);
 
       // ------ Execution harness logic goes here using rate, min and max ----
 
-      List<Action> actions = new ArrayList<>();
       for (Order order : problem.getOrders()) {
         LOGGER.info("Received: {}", order);
-
-        actions.add(new Action(Instant.now(), order.getId(), Action.PLACE, Action.COOLER));
+        processor.place(order);
+        pickupScheduler.schedulePickup(order.getId());
         Thread.sleep(rate.toMillis());
       }
 
+      pickupScheduler.join();
+
       // ----------------------------------------------------------------------
 
-      String result = client.solveProblem(problem.getTestId(), rate, min, max, actions);
+      String result = client.solveProblem(problem.getTestId(), rate, min, max, dispatcher.getActions());
       LOGGER.info("Result: {}", result);
 
     } catch (IOException | InterruptedException e) {
       LOGGER.error("Execution failed: {}", e.getMessage());
+      pickupScheduler.shutdownNow();
+    }
+  }
+
+  private void validateOptions() {
+    if (min.compareTo(max) > 0) {
+      throw new IllegalArgumentException("Min (" + min + ") must be less than or equal to max(" + max + ")");
     }
   }
 

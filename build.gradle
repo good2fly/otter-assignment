@@ -24,6 +24,11 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.0'
     implementation 'com.squareup.okhttp3:okhttp:5.3.2'
     implementation 'org.slf4j:slf4j-jdk14:2.0.17'
+
+    testImplementation platform('org.junit:junit-bom:5.14.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 ext {
@@ -32,4 +37,8 @@ ext {
 
 application {
     mainClass.set(javaMainClass)
+}
+
+test {
+    useJUnitPlatform()
 }
